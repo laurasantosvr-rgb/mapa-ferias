@@ -1,14 +1,15 @@
 import calendar
 from datetime import date, timedelta
 import os
-
+from openpyxl.styles import PatternFill, Font
+from openpyxl.formatting.rule import FormulaRule
 import pandas as pd
 
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
 from estilos import *
-
+from openpyxl.worksheet.datavalidation import DataValidation
 
 def gerar_mapa(ficheiro):
 
@@ -64,6 +65,21 @@ def gerar_mapa(ficheiro):
         mapa_datas
     )
 
+    ultima_coluna = max(mapa_datas.values())
+
+    ultima_linha = (
+        ferias["Nome"]
+        .drop_duplicates()
+        .shape[0]
+        + 4
+    )
+
+    adicionar_lista_ferias(
+        ws,
+        ultima_coluna,
+        ultima_linha
+    )
+    
     # Guardar
 
     os.makedirs("output", exist_ok=True)
@@ -133,27 +149,25 @@ def preencher_colaboradores(ws, ferias, mapa_datas):
 
             celula = ws.cell(row=linha, column=coluna)
 
-            celula.value = 1
-            celula.number_format = ";;;"
-            celula.fill = COR_FERIAS
+            celula.value = "F"
             celula.border = BORDA
             celula.alignment = CENTRO
 
             dia += timedelta(days=1)
     
-    ultima_coluna = max(mapa_datas.values())
+    ultima_coluna = get_column_letter(max(mapa_datas.values()))
 
     for linha in linhas_colaboradores.values():
 
         celula = ws.cell(row=linha, column=2)
 
         celula.value = (
-            f"=SUM(C{linha}:{get_column_letter(ultima_coluna)}{linha})"
+            f'=COUNTIF(C{linha}:{ultima_coluna}{linha},"F")'
         )
 
-        ws.cell(row=linha, column=2).font = FONTE_BOLD
-        ws.cell(row=linha, column=2).alignment = CENTRO
-        ws.cell(row=linha, column=2).border = BORDA
+        celula.font = FONTE_BOLD
+        celula.alignment = CENTRO
+        celula.border = BORDA
 
 
 def criar_cabecalho(ws, ano):
@@ -237,6 +251,27 @@ def criar_cabecalho(ws, ano):
     # Filtro
     ws.auto_filter.ref = f"A4:{get_column_letter(ultima_coluna)}4"
 
+    verde = PatternFill(
+        fill_type="solid",
+        start_color="78ED74",
+        end_color="78ED74"
+    )
+
+    fonte_verde = Font(color="78ED74")
+
+    ultima_coluna = get_column_letter(coluna - 1)
+
+    regra = FormulaRule(
+        formula=['C5="F"'],
+        fill=verde,
+        font=fonte_verde
+    )
+
+    ws.conditional_formatting.add(
+        f"C5:{ultima_coluna}500",
+        regra
+    )   
+
     return mapa_datas
 
 
@@ -286,3 +321,23 @@ def escrever_meses(ws, ano):
             ws.cell(row=2, column=c).border = BORDA
 
         coluna_inicio = coluna_fim + 1
+
+def adicionar_lista_ferias(ws, ultima_coluna, ultima_linha):
+
+    dv = DataValidation(
+        type="list",
+        formula1='"F"',
+        allow_blank=True
+    )
+
+    dv.prompt = "Selecione F para marcar férias."
+    dv.error = "Valor inválido."
+
+    ws.add_data_validation(dv)
+
+    intervalo = (
+        f"C5:"
+        f"{get_column_letter(ultima_coluna)}{ultima_linha}"
+    )
+
+    dv.add(intervalo)
